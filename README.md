@@ -1,4 +1,4 @@
 Drupal-smsframework
 ===================
 
-rCredits bug fixes to smsframework for Drupal 7
+Improvements to Drupal 7's smsframework module, to accommodate rcredits

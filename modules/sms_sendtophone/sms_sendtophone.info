@@ -1,0 +1,13 @@
+name = Send to phone
+description = Provides various tools for sending bits of information via SMS.
+dependencies[] = sms
+package = SMS Framework
+core = 7.x
+files[] = sms_sendtophone.module
+
+; Information added by drupal.org packaging script on 2012-05-10
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "smsframework"
+datestamp = "1336653731"
+

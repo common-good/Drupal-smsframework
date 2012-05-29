@@ -1,0 +1,13 @@
+name = Tracking
+description = Message archiving and delivery tracking for the SMS Framework.
+core = 6.x
+package = SMS Framework
+dependencies[] = sms
+dependencies[] = views
+
+; Information added by drupal.org packaging script on 2012-05-10
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "smsframework"
+datestamp = "1336653731"
+
