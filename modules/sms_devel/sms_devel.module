@@ -6,10 +6,6 @@
  * @package sms
  * @subpackage sms_devel
  */
-include 'sms_devel.send_form.inc';
-include 'sms_devel.virtualgw.inc';
-include 'sms_devel.virtualgw.admin.inc';
-
 
 /**
  * Implement hook_menu()
@@ -26,51 +22,44 @@ function sms_devel_menu() {
     'title'  => 'Devel',
     'description' => 'Development and testing tools.',
     'page callback'    => 'drupal_get_form',
-    'page arguments'   => array('sms_devel_send_form', NULL),
+    'page arguments'   => array('sms_devel_receive_form'),
     'access arguments' => array('administer smsframework'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0
   );
 
-  $items['admin/smsframework/devel/send_form'] = array(
-    'title'  => 'Test send form',
+  $items['admin/smsframework/devel/receive_form'] = array(
+    'title'  => 'Incoming test',
     'type'   => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => -10,
   );
-
-  $items['admin/smsframework/devel/virtualgw'] = array(
-    'title'  => 'Virtual gateway',
-    'page callback'    => 'drupal_get_form',
-    'page arguments'   => array('sms_devel_virtualgw_form', NULL),
+  $items['admin/smsframework/devel/send_form'] = array(
+    'title'  => 'Outgoing test',
+    'page arguments'   => array('sms_send_form', NULL),
     'access arguments' => array('administer smsframework'),
     'type'   => MENU_LOCAL_TASK,
-    'weight' => -9,
-    'file' => 'sms_devel.virtualgw.admin.inc',
+    'weight' => 1
   );
-
-  $items['admin/smsframework/devel/virtualgw/send'] = array(
+/*
+  $items['admin/smsframework/devel/send'] = array(
     'page callback'    => 'sms_devel_virtualgw_ahah_send',
     'access arguments' => array('administer smsframework'),
     'type'   => MENU_CALLBACK,
-    'file' => 'sms_devel.virtualgw.inc',
   );
-
-  $items['sms/virtualgw/receiver'] = array(
+*/
+  $items['admin/smsframework/devel/getactivity'] = array(
+    'page callback'    => 'sms_devel_virtualgw_js_getactivity',
+    'access arguments' => array('administer smsframework'),
+    'type'   => MENU_CALLBACK,
+  );
+  $items['sms/devel/receiver'] = array(
     'page callback'    => 'sms_devel_virtualgw_receiver',
     'page arguments' => array(),
     'access callback' => TRUE,
-    'type'   => MENU_CALLBACK,
-    'file' => 'sms_devel.virtualgw.inc',
-  );
-
-  $items['admin/smsframework/devel/virtualgw/getactivity'] = array(
-    'page callback'    => 'sms_devel_virtualgw_js_getactivity',
-    //'page arguments'   => array(NULL),
-    'access arguments' => array('administer smsframework'),
     'type'   => MENU_CALLBACK,
   );
 
   return $items;
 }
-
 
 /**
  * Implement hook_gateway_info()
@@ -84,8 +73,327 @@ function sms_devel_gateway_info() {
   return array(
     'virtualgw' => array(
       'name' => 'Devel virtual gateway',
-      'send' => 'sms_devel_virtualgw_send',
-      'configure form' => 'sms_devel_virtualgw_settings_form',
+      'send' => 'sms_devel_send',
+      'send form' => 'sms_devel_send_form',
+      'configure form' => 'sms_devel_settings_form',
+      'validate number' => 'sms_devel_validate_number'
     ),
   );
+}
+
+/**
+ * Test outgoing send form for the devel gateway
+ * called by sms_send_form
+ */
+function sms_devel_send_form($required) {
+  // Message text field for my form
+  $form['message'] = array(
+    '#type'  => 'hidden',
+    '#title' => t('Message'),
+    '#rows'  => 4,
+    '#cols'  => 40,
+	'#value' => 'To confirm this message, reply with this text: LEMON BAR',
+    '#resizable' => FALSE,
+  );
+
+  // Submit button for my form
+  $form['submit'] = array(
+    '#type'  => 'submit',
+    '#value' => 'Submit',
+    '#validate' => array('sms_send_form_validate'),
+    '#submit'   => array('sms_send_form_submit', 'sms_devel_send_form_submit'),
+  );
+
+  return $form;
+}
+
+function sms_devel_send_form_submit($form, &$form_state) {
+  // These is what happens after the SMS has been sent
+  $number  = $form_state['values']['number'];
+  $message = $form_state['values']['message'];
+  drupal_set_message("Form submitted ok for number $number");
+//  drupal_set_message("Form submitted ok for number $number and message: $message");
+}
+
+/**
+ * Callback for sending messages.
+ */
+function sms_devel_send($number, $message, $options) {
+  drupal_set_message($message);
+}
+
+/**
+ * The big form
+ *
+ * @return
+ *   Drupal system settings form array.
+ */
+function sms_devel_settings_form() {
+  $form['sms_devel_virtualgw_settings'] = array(
+    '#type'  => 'fieldset',
+    '#title' => t('Settings'),
+    '#collapsible' => TRUE,
+    '#collapsed'   => TRUE,
+  );
+  $form['sms_devel_virtualgw_settings']['sms_devel_virtualgw_autoreply_enabled'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Enable autoreply'),
+    '#default_value' => variable_get('sms_devel_virtualgw_autoreply_enabled', FALSE),
+  );
+  $form['sms_devel_virtualgw_settings']['sms_devel_virtualgw_autoreply_format'] = array(
+    '#type'  => 'textarea',
+    '#rows'  => 4,
+    '#cols'  => 40,
+    '#resizable' => FALSE,
+    '#default_value' => variable_get('sms_devel_virtualgw_autoreply_format', 'echo: {message}'),
+    '#description'   => t('If enabled then the gateway will reply to your messages through sms_incoming()<br />You may use these tokens: {number} {gw_number} {message} {reference}'),
+  );
+  $form['sms_devel_virtualgw_settings']['sms_devel_virtualgw_receipts_enabled'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Enable receipts'),
+    '#default_value' => variable_get('sms_devel_virtualgw_receipts_enabled', FALSE),
+    '#description'   => t('If enabled then the gateway will provide a message receipt through sms_receipt()'),
+  );
+  $form['sms_devel_virtualgw_settings']['submit'] = array(
+    '#type'   => 'submit',
+    '#value'  => t('Save'),
+    '#submit' => array('sms_devel_virtualgw_form_save_settings'),
+  );
+
+  $form['sms_devel_virtualgw_log'] = array(
+    '#type'  => 'fieldset',
+    '#title' => t('Activity log'),
+    '#collapsible' => TRUE,
+    '#collapsed'   => FALSE,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_refresh'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Refresh the logfield'),
+    '#default_value' => (variable_get('sms_devel_virtualgw_logfield_refresh', 1)) ? 1 : 0,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_showsent'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Show sent messages'),
+    '#default_value' => (variable_get('sms_devel_virtualgw_logfield_showsent', 1)) ? 1 : 0,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_showreceived'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Show received messages'),
+    '#default_value' => (variable_get('sms_devel_virtualgw_logfield_showreceived', 1)) ? 1 : 0,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_showreceipts'] = array(
+    '#type'  => 'checkbox',
+    '#title' => t('Show message receipts'),
+    '#default_value' => (variable_get('sms_devel_virtualgw_logfield_showreceipts', 1)) ? 1 : 0,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_lines'] = array(
+    '#type'  => 'textfield',
+    '#title' => t('Number of recent activity records to pull'),
+    '#size'  => 4,
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield_refreshes'] = array(
+    '#type'  => 'item',
+    '#title' => t('Refresh count'),
+    '#value' => t(''),
+  );
+  $form['sms_devel_virtualgw_log']['sms_devel_virtualgw_logfield'] = array(
+    '#type'  => 'textarea',
+    '#title' => t('Virtual gateway activity'),
+    '#rows'  => 20,
+    '#cols'  => 60,
+    '#resizable' => TRUE,
+    '#prefix' => '<div id="logfield">',
+    '#value'  => 'Sorry, this feature is not finished yet.',
+    '#suffix' => '</div>',
+  );
+  $form['sms_devel_virtualgw_log']['get'] = array(
+    '#type'  => 'button',
+    '#value' => t('Get activity'),
+    '#ahah'  => array(
+      'path'    => 'admin/smsframework/devel/getactivity',
+      //'event'   => 'mousedown',
+      'method'  => 'replace',
+      'wrapper' => 'logfield',
+    ),
+  );
+
+  return $form;
+}
+
+function sms_devel_virtualgw_form_save_settings($form, &$form_state) {
+  variable_set('sms_devel_virtualgw_autoreply_enabled', $form_state['values']['sms_devel_virtualgw_autoreply_enabled']);
+  variable_set('sms_devel_virtualgw_autoreply_format', $form_state['values']['sms_devel_virtualgw_autoreply_format']);
+  variable_set('sms_devel_virtualgw_receipts_enabled', $form_state['values']['sms_devel_virtualgw_receipts_enabled']);
+}
+
+define('SMS_DEVEL_VIRTUALGW_TYPE_OUT',     0);
+define('SMS_DEVEL_VIRTUALGW_TYPE_IN',      1);
+define('SMS_DEVEL_VIRTUALGW_TYPE_RECEIPT', 2);
+
+/**
+ * Callback for sending messages.
+ *
+ * Options for this send function:
+ *   gw_number - The sender of the message. MSISDN or text string. Min=3, max=11 chars.
+ *   reference - Message reference tag (to appear on any receipt).
+ *
+ * @param $number
+ *   MSISDN of message recipient. Expected to include the country code prefix.
+ * @param $message
+ *   Message body text.
+ * @param $options
+ *   Options array from SMS Framework.
+ * @return
+ *   Gateway response array.
+ */
+function sms_devel_virtualgw_send($number, $message, $options) {
+  // Set a default sender if it is not specified
+  if (! array_key_exists('gw_number', $options)) {
+    $options['gw_number'] = '99999';
+  }
+
+  // Set a default reference if it is not specified
+  if (! array_key_exists('reference', $options)) {
+    $options['reference'] = md5($number . $message);
+  }
+
+  // Write log record for outgoing message
+  sms_devel_virtualgw_log_insert(SMS_DEVEL_VIRTUALGW_TYPE_OUT, $number, $message, $options);
+
+  // Invoke additional virtual gateway features eg: autoreplies, receipts.
+  sms_devel_virtualgw_sendlogic($number, $message, $options);
+
+  // Always return success
+  return array(
+    'status'      => TRUE,
+    'status_code' => SMS_GW_OK,
+    'gateway_status_code' => 'OK',
+    'gateway_status_text' => 'sms_devel_virtualgw: send: OK',
+  );
+}
+
+function sms_devel_receive_form() {
+/*  if (module_exists('sms_user')) {
+    $options =  array(0 => t('Unknown number'))+
+      db_query("SELECT number, uid FROM {sms_user} WHERE status = 2")->fetchAllKeyed(0,1);
+    $form['number'] = array(
+      '#title' => t('From (User ID)'),
+      '#description' => implode(' ', array(
+        t('Send from an unknown number, or one belonging to a user (uid).'),
+        t('The system will log in as that user to handle the SMS, then log back in as you.')
+      )),
+      '#type'  => 'select',
+      '#options' => $options,
+    );
+  }
+  else {
+ */
+    $users = db_query("SELECT number, uid FROM {sms_user} WHERE status = 2")->fetchAllKeyed(0,1);
+	$number = key($users);
+    $form['number'] = array(
+      '#type'  => 'textfield', // ws
+      '#title' => t('From (number)'),
+	    '#value' => $number, // ws
+      '#size'  => 30,
+    );
+    $form['uid'] = array( // ws
+      '#type'  => 'hidden', // ws
+	  '#value' => $users[$number], // ws
+    );
+//  }
+  $form['message'] = array(
+    '#type'  => 'textfield', // ws
+    '#title' => t('Message'),
+//    '#rows'  => 4,
+//    '#cols'  => 40,
+    '#size' => 100, // ws
+    '#resizable' => FALSE,
+  );
+  
+  $form['submit'] = array(
+    '#type'=> 'submit',
+    '#value' => 'Send it!'
+  );
+
+  return $form;
+}
+
+function sms_devel_receive_form_submit($form, $form_state) {
+  //wot $options?
+  $options = array();
+  // Write log record for incoming message
+  sms_devel_virtualgw_log_insert(SMS_DEVEL_VIRTUALGW_TYPE_IN, $form_state['values']['number'], $form_state['values']['message'], $options);
+  global $account;
+  $account = clone $GLOBALS['user'];
+//  echo $form_state['values']['number']; die('here');
+//  sms_send($form_state['values']['number'], 'here it is'); return;
+  // Call SMS Framework incoming message handler
+  sms_incoming($form_state['values']['number'], $form_state['values']['message'], $options);
+}
+
+/*
+ * implements hook sms_incoming
+ * use redirect to the current page here to stop the sms user module logging us out
+ */
+function sms_devel_sms_incoming($op, $number, $message, $options) {
+  if ($op == 'post process') {
+    global $account;
+    $edit = array();
+    user_module_invoke('login', $edit, $account);
+    drupal_goto('admin/smsframework/devel/receive_form');
+  }
+}
+
+function sms_devel_virtualgw_log_insert($type, $number = '', $message = '', $options = array()) {
+  db_query("INSERT INTO {sms_devel_virtualgw} (created, type, number, message, options) 
+    VALUES (:created, :type, :number, :message, :options)",
+    array(
+      ':created' => REQUEST_TIME,
+      ':type' => $type,
+      ':number' => $number,
+      ':message' => $message,
+      ':options' => serialize($options),
+    )
+  );
+}
+
+function sms_devel_virtualgw_sendlogic($number, $message, $options) {
+  $autoreply_enabled = variable_get('sms_devel_virtualgw_autoreply_enabled', FALSE);
+  $autoreply_format  = variable_get('sms_devel_virtualgw_autoreply_format',  '');
+  $receipts_enabled  = variable_get('sms_devel_virtualgw_receipts_enabled',  FALSE);
+
+  if ($autoreply_enabled) {
+    // @todo Figure out the tokens logic
+    //$echo_message = $autoreply_format . $message;
+    $echo_message = 'echo: '. $message;
+
+    // Swap the numbers for the echo
+    $echo_number  = $options['gw_number'];
+    $echo_options = array('gw_number' => $number);
+
+    // Echo
+    sms_devel_virtualgw_receiver($echo_number, $echo_message, $echo_options);
+  }
+
+  if ($receipts_enabled) {
+    // Trigger a message delivery receipt
+    $status = SMS_MSG_STATUS_DELIVERED;
+    $reference = $options['reference'];
+    $options['gateway_message_status'] = 'DELIVERED';
+    $options['gateway_message_status_text'] = 'Message delivered OK';
+
+    sms_receipt($number, $reference, $status, $options);
+  }
+}
+
+function sms_devel_validate_number($number) {
+  drupal_set_message('Devel gateway validates all numbers!', 'warning');
+  return TRUE;
+  return FALSE;
+}
+
+//tell the user what the confirm code is on the user number confirm page
+function sms_devel_form_sms_user_settings_confirm_form_alter($form, $form_state) {
+  $code = db_query('SELECT code FROM {sms_user} WHERE uid = :uid', array(':uid' => $form['uid']['#value']))->fetchField();
+  drupal_set_message(t('Confirmation code is: @code', array('@code' => $code)));
 }

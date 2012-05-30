@@ -54,7 +54,7 @@ function sms_user_menu_alter(&$callbacks) {
   $callbacks['user/%user_category/edit/mobile']['page arguments'] = array(1);
   $callbacks['user/%user_category/edit/mobile']['module'] = 'sms_user';
   $callbacks['user/%user_category/edit/mobile']['file'] = 'sms_user.module';
-  //dsm($callbacks);
+  //dpm($callbacks);
 }
 
 /**
@@ -145,7 +145,6 @@ function _sms_user_sleep_active($account) {
  * Menu callback; provides the forms for adding and confirming a user's mobile number.
  */
 function sms_user_settings($account) {
-  dsm($account);
   switch (isset($account->sms_user) ? $account->sms_user['status'] : 0) {
     case 0:
       $output = drupal_get_form('sms_user_settings_add_form', $account);
@@ -291,7 +290,7 @@ function sms_user_settings_reset_form($form, &$form_state, $account) {
     '#type' => 'item',
     '#title' => t('Your mobile phone number'),
     '#value' => $account->sms_user['number'],
-    '#description' => t('Your mobile phone number has been confirmed.'),
+    '#description' => t('Your mobile phone number (@number) has been confirmed.', array('@number' => '4123456790')), // ws
   );
 
   $form['reset'] = array(
@@ -534,10 +533,10 @@ function sms_user_user_load($users) {
  */
 function sms_user_save(&$edit, &$account, $category) {
   if (($category == 'mobile' || $category == 'account') && isset($edit['sms_user'])) {
-    dsm($edit);
+    dpm($edit);
     $number = (object)$edit['sms_user'];
     $number->uid = $account->uid;
-    dsm($number);
+    dpm($number);
 
     $primary_keys = array();
     if ($account->sms_user['status'] == SMS_USER_PENDING && $edit['sms_user']['status'] == SMS_USER_CONFIRMED) { // is existing
@@ -675,7 +674,7 @@ function sms_user_sms_incoming($op, $number, $message, $options) {
       }
       break;
     case 'post process':
-      sms_user_logout();
+      if(!isset($options['no logout'])) sms_user_logout(); // ws
       break;
   }
 }
@@ -745,14 +744,14 @@ function sms_user_login_metadata($uid = NULL, $metadata = NULL, $reset = FALSE) 
  *
  * @param $number
  *   The user's mobile number.
- * @param $message
+ * @param $message (optional, defaults to NULL)
  *   Body of the SMS message.
- * @param $options
+ * @param $options (optional)
  *   An associative array of metadata passed from the incoming gateway.
  * @return
  *   The user object of the created user.
  */
-function sms_user_register_new_user($number, $message, $options) {
+function sms_user_register_new_user($number, $message = NULL, $options = array()) {
   global $user;
 
   $edit = array();
@@ -788,9 +787,9 @@ function sms_user_register_new_user($number, $message, $options) {
         }
       }
     }
-    // Auto-generated password.
-    if (!$edit['pass']) {
-      $edit['pass'] = user_password();
+    
+    if (!isset($edit['pass'])) { 
+      $edit['pass'] = user_password(); // Auto-generated password.
     }
 
     // Pick a pseudo-random name for the user -- using the email
@@ -799,30 +798,17 @@ function sms_user_register_new_user($number, $message, $options) {
 
     // Save the user.
     $edit['status'] = variable_get('user_register', 1) == 1;
-    $account = user_save('', $edit);
+    $account = user_save(NULL, $edit);
   }
 
-
-  // Verify that the account was created.
-  if (is_object($account)) {
-    $user = $account;
-
-    $metadata = array(
-      'register' => TRUE,
-      'number' => $number,
-      'message' => $message,
-      'options' => $options,
-    );
-    sms_user_login_metadata($account->uid, $metadata);
-
-    $edit = array();
-    user_module_invoke('login', $edit, $account);
-
-    return $account;
-  }
-
-  return FALSE;
-
+  if (!is_object($account)) return FALSE; // Verify that the account was created.
+  
+  $user = $account;
+  $register = TRUE;
+  sms_user_login_metadata($account->uid, compact('register', 'number', 'message', 'options'));
+  $edit = array(); // to pass by reference
+  user_module_invoke('login', $edit, $account);
+  return $account;
 }
 
 /**
