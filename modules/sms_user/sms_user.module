@@ -18,12 +18,12 @@ require_once 'sms_user.rules.inc';
 function sms_user_permission() {
   return array(
     'receive sms' => array(
-      'title' => t('receive sms'),
-      'description' => t('TODO Add a description for \'receive sms\''),
+      'title' => t('Receive SMS'),
+      'description' => t('Receive a text message from this site.'),
     ),
     'edit own sms number' => array(
-      'title' => t('edit own sms number'),
-      'description' => t('TODO Add a description for \'edit own sms number\''),
+      'title' => t('Edit own SMS number'),
+      'description' => t('Change to a different cell phone number, subject to confirmation.'),
     ),
   );
 }
@@ -72,7 +72,7 @@ function sms_user_send($uid, $message) {
   
   //Check if the user is enabled to receive SMS
   if (user_access('receive sms', $account)) {
-    if ($account->sms_user[0]['status'] == 2) {
+    if ($account->sms_user[0]['status'] == SMS_USER_CONFIRMED) {
       return sms_send($account->sms_user[0]['number'], $message, $account->sms_user[0]['gateway']);
     }
     else {
@@ -290,7 +290,7 @@ function sms_user_settings_reset_form($form, &$form_state, $account) {
     '#type' => 'item',
     '#title' => t('Your mobile phone number'),
     '#value' => $account->sms_user['number'],
-    '#description' => t('Your mobile phone number (@number) has been confirmed.', array('@number' => '4123456790')), // ws
+    '#description' => t('Your mobile phone number (@number) has been confirmed.', array('@number' => $account->sms_user['number'])), // ws
   );
 
   $form['reset'] = array(
@@ -419,17 +419,30 @@ function sms_user_validate_number(&$number) {
 }
 
 /**
- * Implements hook_user_presave().
- */
-function sms_user_user_presave(&$edit, $account, $category) {
-  return sms_user_save($edit, $account, $category);
-}
-
-/**
  * Implements hook_user_insert().
  */
 function sms_user_user_insert(&$edit, $account, $category) {
-  return sms_user_save($edit, $account, $category);
+  sms_user_user_update($edit, $account, $category);
+}
+
+/**
+ * Implements hook_user_update().
+ */
+function sms_user_user_update(&$edit, $account, $category) {
+  if ($category == 'mobile' || $category == 'account') {
+    if (isset($edit['sms_user'])) sms_user_saveit($edit['sms_user'], $account);
+  }
+}
+
+/**
+ * Save or update user module data.
+ */
+function sms_user_saveit($sms_user_info, $account) {
+  $sms_user_info['uid'] = $account->uid;
+  $confirming = ($account->sms_user['status'] == SMS_USER_PENDING && $sms_user_info['status'] == SMS_USER_CONFIRMED);
+  $primary_keys = $confirming ? array('number') : array(); // ws: does this work? does it do anything?
+  $sms_user_info['status'] = SMS_USER_CONFIRMED; // ws: for now, with everything through SMS, we want to be able to send to anyone
+  drupal_write_record('sms_user', $sms_user_info, $primary_keys);
 }
 
 /**
@@ -527,31 +540,6 @@ function sms_user_user_load($users) {
 }
 
 /**
- * Save user module data.
- *
- * @see sms_user_user()
- */
-function sms_user_save(&$edit, &$account, $category) {
-  if (($category == 'mobile' || $category == 'account') && isset($edit['sms_user'])) {
-    dpm($edit);
-    $number = (object)$edit['sms_user'];
-    $number->uid = $account->uid;
-    dpm($number);
-
-    $primary_keys = array();
-    if ($account->sms_user['status'] == SMS_USER_PENDING && $edit['sms_user']['status'] == SMS_USER_CONFIRMED) { // is existing
-      $primary_keys = array('number');
-    }
-    drupal_write_record('sms_user', $number, $primary_keys);
-
-    $edit['sms_user']['number'] = NULL;
-    $edit['sms_user']['status'] = NULL;
-    $edit['sms_user']['code'] = NULL;
-    $edit['sms_user']['gateway'] = NULL;
-  }
-}
-
-/**
  * Deletes a user's mobile information from the database
  *
  * @param $uid
@@ -588,7 +576,7 @@ function sms_user_delete($uid, $number = FALSE) {
 function _sms_user_confirm_message($code) {
   $text_format = variable_get('sms_user_confirmation_message', '[site-name] confirmation code: [confirm-code]');
   // @todo: d7 token support
-  //$text = token_replace_multiple($text_format, array('sms_user' => array('confirm-code' => $code)));
+  $text = token_replace($text_format, array('sms_user' => array('confirm-code' => $code)));
   return $text;
 }
 
@@ -649,20 +637,18 @@ function sms_user_token_list($type = 'all') {
  * Implements hook_sms_incoming().
  */
 function sms_user_sms_incoming($op, $number, $message, $options) {
-  global $user;
-
   switch ($op) {
     case 'pre process':
       if ($account = sms_user_authenticate($number)) {
         $metadata = array(
-          'login' => TRUE,
+          'login' => !sms_devel_gateway(),
           'number' => $number,
           'message' => $message,
           'options' => $options,
         );
         sms_user_login_metadata($account->uid, $metadata);
         $edit = array();
-        user_module_invoke('login', $edit, $account);
+        if (!sms_devel_gateway()) user_module_invoke('login', $edit, $account); // ws: avoid login when using sms devel
       }
       elseif (variable_get('sms_user_registration_enabled', 0) && $number) {
         if ($account = sms_user_register_new_user($number, $message, $options)) {
@@ -674,7 +660,8 @@ function sms_user_sms_incoming($op, $number, $message, $options) {
       }
       break;
     case 'post process':
-      if(!isset($options['no logout'])) sms_user_logout(); // ws
+      if(!sms_devel_gateway()) sms_user_logout(); // ws
+//      if(!isset($options['no logout'])) sms_user_logout(); // ws
       break;
   }
 }
@@ -792,9 +779,7 @@ function sms_user_register_new_user($number, $message = NULL, $options = array()
       $edit['pass'] = user_password(); // Auto-generated password.
     }
 
-    // Pick a pseudo-random name for the user -- using the email
-    // address would be a privacy violation.
-    $edit['name'] = substr(md5($number . strval(REQUEST_TIME)), 0, 10);
+    $edit['name'] = substr(md5($number . strval(REQUEST_TIME)), 0, 10); // pseudo-random name (using email address would be a privacy violation)
 
     // Save the user.
     $edit['status'] = variable_get('user_register', 1) == 1;
@@ -803,11 +788,13 @@ function sms_user_register_new_user($number, $message = NULL, $options = array()
 
   if (!is_object($account)) return FALSE; // Verify that the account was created.
   
-  $user = $account;
   $register = TRUE;
   sms_user_login_metadata($account->uid, compact('register', 'number', 'message', 'options'));
   $edit = array(); // to pass by reference
-  user_module_invoke('login', $edit, $account);
+  if (!sms_devel_gateway()) {  // ws: don't change current user and avoid login when using sms devel
+    $user = $account;
+    user_module_invoke('login', $edit, $account);
+  }
   return $account;
 }
 
@@ -821,7 +808,8 @@ function sms_user_register_new_user($number, $message = NULL, $options = array()
 function sms_user_authenticate($number) {
   global $user;
 
-  $uid = sms_user_get_uid($number);
+  if (!($uid = sms_user_get_uid($number))) return FALSE;
+  
   if ($account = array_shift(user_load_multiple(array($uid), array('status' => 1)))) {
     $user = $account;
     watchdog('sms', '%name was authenticated using SMS.', array('%name' => $user->name));
@@ -830,13 +818,12 @@ function sms_user_authenticate($number) {
 }
 
 /**
- *
+ * Implements hook_user_logout().
  */
 function sms_user_logout() {
   global $user;
-
-  // Destroy the current session:
-  session_destroy();
+  if (sms_devel_gateway()) return; // ws: avoid logout if developing
+  session_destroy(); // Destroy the current session
   $user = drupal_anonymous_user();
 }
 

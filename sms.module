@@ -267,6 +267,14 @@ function sms_default_gateway() {
 }
 
 /**
+ * Check for development gateway
+ */
+function sms_devel_gateway() { // ws
+  $gateway = sms_default_gateway();
+  return $gateway['identifier'] == 'virtualgw';
+}
+
+/**
  * Implements hook_gateway_info().
  */
 function sms_gateway_info() {

@@ -119,7 +119,7 @@ function sms_devel_send_form_submit($form, &$form_state) {
  * Callback for sending messages.
  */
 function sms_devel_send($number, $message, $options) {
-  drupal_set_message($message);
+  drupal_set_message("To $number: $message");
 }
 
 /**
@@ -273,40 +273,21 @@ function sms_devel_virtualgw_send($number, $message, $options) {
 }
 
 function sms_devel_receive_form() {
-/*  if (module_exists('sms_user')) {
-    $options =  array(0 => t('Unknown number'))+
-      db_query("SELECT number, uid FROM {sms_user} WHERE status = 2")->fetchAllKeyed(0,1);
-    $form['number'] = array(
-      '#title' => t('From (User ID)'),
-      '#description' => implode(' ', array(
-        t('Send from an unknown number, or one belonging to a user (uid).'),
-        t('The system will log in as that user to handle the SMS, then log back in as you.')
-      )),
-      '#type'  => 'select',
-      '#options' => $options,
-    );
+  $number = db_query("SELECT number FROM {sms_devel_virtualgw} ORDER BY id DESC LIMIT 1")->fetchField(); // last phone number used
+  if (!$number) {
+    $smsers = db_query("SELECT number, uid FROM {sms_user} WHERE status = 2")->fetchAllKeyed(0,1);
+	  $number = key($smsers); // first user's phone number
   }
-  else {
- */
-    $users = db_query("SELECT number, uid FROM {sms_user} WHERE status = 2")->fetchAllKeyed(0,1);
-	$number = key($users);
-    $form['number'] = array(
-      '#type'  => 'textfield', // ws
-      '#title' => t('From (number)'),
-	    '#value' => $number, // ws
-      '#size'  => 30,
-    );
-    $form['uid'] = array( // ws
-      '#type'  => 'hidden', // ws
-	  '#value' => $users[$number], // ws
-    );
-//  }
+  $form['number'] = array(
+    '#type'  => 'textfield',
+    '#title' => t('From (number)'),
+    '#size'  => 30,
+  );
+  $form['number']['#default_value'] = $number;
   $form['message'] = array(
-    '#type'  => 'textfield', // ws
+    '#type'  => 'textfield',
     '#title' => t('Message'),
-//    '#rows'  => 4,
-//    '#cols'  => 40,
-    '#size' => 100, // ws
+    '#size' => 100,
     '#resizable' => FALSE,
   );
   
@@ -319,28 +300,31 @@ function sms_devel_receive_form() {
 }
 
 function sms_devel_receive_form_submit($form, $form_state) {
-  //wot $options?
   $options = array();
-  // Write log record for incoming message
-  sms_devel_virtualgw_log_insert(SMS_DEVEL_VIRTUALGW_TYPE_IN, $form_state['values']['number'], $form_state['values']['message'], $options);
-  global $account;
-  $account = clone $GLOBALS['user'];
-//  echo $form_state['values']['number']; die('here');
-//  sms_send($form_state['values']['number'], 'here it is'); return;
-  // Call SMS Framework incoming message handler
-  sms_incoming($form_state['values']['number'], $form_state['values']['message'], $options);
+  $input = $form_state['input'];
+  $number = $input['number'];
+  if (substr($number, 0, 2) != '+1') $number = '+1' . $number;
+  sms_devel_virtualgw_log_insert(SMS_DEVEL_VIRTUALGW_TYPE_IN, $number, $input['message'], $options);
+//  global $account;
+//  $account = clone $GLOBALS['user'];
+  sms_incoming($number, $input['message'], $options);
 }
 
 /*
- * implements hook sms_incoming
- * use redirect to the current page here to stop the sms user module logging us out
+ * Implements hook_sms_incoming().
+ *
+ * Restore original user when done processing SMS.
  */
 function sms_devel_sms_incoming($op, $number, $message, $options) {
+  global $user, $original_user;
+
+  if ($op == 'pre process') {
+    $original_user = $user;
+// FAILS! (prevents messages from showing):   $old_state = drupal_save_session(FALSE);
+  }
   if ($op == 'post process') {
-    global $account;
-    $edit = array();
-    user_module_invoke('login', $edit, $account);
-    drupal_goto('admin/smsframework/devel/receive_form');
+//    drupal_save_session($old_state);
+    $user = $original_user;
   }
 }
 
