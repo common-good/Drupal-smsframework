@@ -178,7 +178,6 @@ function sms_send($number, $message, $options = array()) {
     $response = $gateway['send']($number, $message, $options);
   }
   $result = sms_handle_result($response, $number, $message);
-
   // Post process hook
   foreach (module_implements('sms_send_process') as $module) {
     $function = $module . '_sms_send_process';
@@ -192,21 +191,14 @@ function sms_send($number, $message, $options = array()) {
  * Handle the response back from the sms gateway.
  */
 function sms_handle_result($result, $number, $message) {
-  if ($result['status']) {
-    return TRUE;
-  }
-  else {
-    $error_message = 'Sending SMS to %number failed.';
-    $variables['%number'] = $number;
-    if ($result['message']) {
-      $error_message .= ' The gateway said ' . $result['message'];
-      if (!empty($result['variables'])) {
-        $variables = array_merge($variables, $result['variables']);
-      }
-    }
-    watchdog('sms', $error_message, $variables, WATCHDOG_ERROR);
-    return FALSE;
-  }
+  if ($result['status']) return TRUE;
+
+  $error_message = "Sending SMS to $number failed.";
+  if ($result['message']) $error_message .= ' The gateway said ' . $result['message'];
+  $variables = empty($result['variables']) ? array() : $result['variables'];
+  watchdog('sms', $error_message, $variables, WATCHDOG_ERROR);
+  if (sms_devel_gateway()) drupal_set_message($error_message, 'error');
+  return FALSE;
 }
 
 /**

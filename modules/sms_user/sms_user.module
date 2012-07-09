@@ -649,8 +649,7 @@ function sms_user_sms_incoming($op, $number, $message, $options) {
         sms_user_login_metadata($account->uid, $metadata);
         $edit = array();
         if (!sms_devel_gateway()) user_module_invoke('login', $edit, $account); // ws: avoid login when using sms devel
-      }
-      elseif (variable_get('sms_user_registration_enabled', 0) && $number) {
+      } elseif (variable_get('sms_user_registration_enabled', 0) && $number) {
         if ($account = sms_user_register_new_user($number, $message, $options)) {
           // Send the new user the registration message if one exists.
           if ($message = variable_get('sms_user_new_account_message', '')) {
@@ -809,12 +808,14 @@ function sms_user_authenticate($number) {
   global $user;
 
   if (!($uid = sms_user_get_uid($number))) return FALSE;
-  
-  if ($account = array_shift(user_load_multiple(array($uid), array('status' => 1)))) {
+  $accounts = user_load_multiple(array($uid), array('status' => 1));
+//  print_r($accounts); die("number=$number");
+  if ($account = array_shift($accounts)) {
     $user = $account;
     watchdog('sms', '%name was authenticated using SMS.', array('%name' => $user->name));
     return $user;
   }
+  return FALSE;
 }
 
 /**

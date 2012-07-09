@@ -120,6 +120,8 @@ function sms_devel_send_form_submit($form, &$form_state) {
  */
 function sms_devel_send($number, $message, $options) {
   drupal_set_message("To $number: $message");
+  $status = TRUE;
+  return compact('status');
 }
 
 /**
@@ -295,6 +297,9 @@ function sms_devel_receive_form() {
     '#type'=> 'submit',
     '#value' => 'Send it!'
   );
+
+  if (!sms_devel_gateway()) drupal_set_message(t('SMS gateway changed to Devel.'));
+  variable_set('sms_default_gateway', 'virtualgw');
 
   return $form;
 }
