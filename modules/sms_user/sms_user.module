@@ -440,10 +440,8 @@ function sms_user_user_update(&$edit, $account, $category) {
  */
 function sms_user_saveit($sms_user_info, $account) {
   $sms_user_info['uid'] = $account->uid;
-  $confirming = ($account->sms_user['status'] == SMS_USER_PENDING && $sms_user_info['status'] == SMS_USER_CONFIRMED);
-  $primary_keys = $confirming ? array('number') : array(); // ws: does this work? does it do anything?
-  $sms_user_info['status'] = SMS_USER_CONFIRMED; // ws: for now, with everything through SMS, we want to be able to send to anyone
-  drupal_write_record('sms_user', $sms_user_info, $primary_keys);
+  $key = $account->is_new ? array() : 'number';
+  drupal_write_record('sms_user', $sms_user_info, $key);
 }
 
 /**
