@@ -45,7 +45,7 @@ function sms_user_schema() {
       ),
     ),
     'primary key' => array('number'),
-    'indexes' => array('uid' => array('uid')),
+    'indexes' => array('uid' => array('uid'), 'number' => array('number')),
   );
 
   return $schema;
