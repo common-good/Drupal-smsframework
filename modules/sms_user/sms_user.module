@@ -48,7 +48,7 @@ function sms_user_menu() {
 
 /**
  * Implements hook_menu_alter().
- */
+
 function sms_user_menu_alter(&$callbacks) {
   $callbacks['user/%user_category/edit/mobile']['page callback'] = 'sms_user_settings';
   $callbacks['user/%user_category/edit/mobile']['page arguments'] = array(1);
@@ -56,7 +56,8 @@ function sms_user_menu_alter(&$callbacks) {
   $callbacks['user/%user_category/edit/mobile']['file'] = 'sms_user.module';
   //dpm($callbacks);
 }
-
+ */
+ 
 /**
  * Access control on edit users sms number.
  */
@@ -446,7 +447,7 @@ function sms_user_saveit($sms_user_info, $account) {
 
 /**
  * Implements hook_user_view().
- */
+ 
 function sms_user_user_view($account, $view_mode) {
   global $user;
   if (user_access('receive sms', $account) && ($user->uid == $account->uid || user_access('administer smsframework'))) {
@@ -466,7 +467,7 @@ function sms_user_user_view($account, $view_mode) {
     );
   }
 }
-
+*/
 /**
  * Implements hook_user_XXX().
  */
@@ -505,7 +506,7 @@ function sms_user_user_login(&$edit, $account) {
 
 /**
  * Implements hook_user_categories().
- */
+
 function sms_user_user_categories() {
   $categories['mobile'] = array(
     'name' => 'mobile',
@@ -514,6 +515,7 @@ function sms_user_user_categories() {
   );
   return $categories;
 }
+*/
 
 /**
  * Load user mobile data into the user object.
