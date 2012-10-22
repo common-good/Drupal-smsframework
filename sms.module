@@ -174,7 +174,7 @@ function sms_send($number, $message, $options = array()) {
   }
 
   $response = NULL;
-  if (function_exists($gateway['send'])) {
+  if (function_exists(@$gateway['send'])) {
     $response = $gateway['send']($number, $message, $options);
   }
   $result = sms_handle_result($response, $number, $message);
@@ -197,7 +197,6 @@ function sms_handle_result($result, $number, $message) {
   if ($result['message']) $error_message .= ' The gateway said ' . $result['message'];
   $variables = empty($result['variables']) ? array() : $result['variables'];
   watchdog('sms', $error_message, $variables, WATCHDOG_ERROR);
-  if (sms_devel_gateway()) drupal_set_message($error_message, 'error');
   return FALSE;
 }
 
@@ -324,7 +323,7 @@ function sms_gateways($op = 'gateways', $gateway = NULL) {
     case 'gateways':
       return $_gateways;
     case 'gateway':
-      $return = $_gateways[$gateway];
+      $return = @$_gateways[$gateway];
       $return['identifier'] = $gateway;
       return $return;
     case 'names':
